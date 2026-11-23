@@ -1,0 +1,106 @@
+@import 'tailwindcss';
+
+/*
+ * Morning Pet design tokens
+ * ------------------------------------------------------------------
+ * All brand colors live here as raw CSS variables, then get exposed to
+ * Tailwind via @theme below (e.g. `bg-surface`, `text-ink`, `bg-sun`).
+ * To restyle the app, change the values here — components never use
+ * hard-coded hex colors.
+ *
+ * NOTE: placeholder identity — "warm sunrise". Swap these values for the
+ * official Morning Pet brand palette when it's available.
+ */
+:root {
+  --mp-bg: #fff8ee;
+  --mp-surface: #ffffff;
+  --mp-surface-muted: #fdf0dc;
+  --mp-border: #f0dfc4;
+  --mp-ink: #3a2a1a;
+  --mp-ink-muted: #8a7560;
+  --mp-sun: #ffb547;        /* primary / brand */
+  --mp-sun-strong: #f08a24; /* primary pressed, emphasis */
+  --mp-sun-ink: #3a2a1a;    /* text on sun */
+  --mp-sky: #6fb7e9;        /* secondary accent */
+  --mp-leaf: #5cb87a;       /* success / completed */
+  --mp-berry: #e8607a;      /* alerts / destructive */
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mp-bg: #1c1712;
+    --mp-surface: #2a221a;
+    --mp-surface-muted: #342a20;
+    --mp-border: #45382a;
+    --mp-ink: #fbefe0;
+    --mp-ink-muted: #bba68e;
+    --mp-sun: #ffb547;
+    --mp-sun-strong: #ffc670;
+    --mp-sun-ink: #2a1c0e;
+    --mp-sky: #7fc3f0;
+    --mp-leaf: #6fcb8c;
+    --mp-berry: #f07a90;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--mp-bg);
+  --color-surface: var(--mp-surface);
+  --color-surface-muted: var(--mp-surface-muted);
+  --color-border: var(--mp-border);
+  --color-ink: var(--mp-ink);
+  --color-ink-muted: var(--mp-ink-muted);
+  --color-sun: var(--mp-sun);
+  --color-sun-strong: var(--mp-sun-strong);
+  --color-sun-ink: var(--mp-sun-ink);
+  --color-sky: var(--mp-sky);
+  --color-leaf: var(--mp-leaf);
+  --color-berry: var(--mp-berry);
+
+  --font-sans: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-card: 1.5rem;
+  --shadow-card: 0 1px 2px rgb(58 42 26 / 0.06), 0 4px 16px rgb(58 42 26 / 0.06);
+
+  --animate-hop: hop 2.4s ease-in-out infinite;
+  @keyframes hop {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6%); }
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 3px solid var(--mp-sky);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-card bg-surface border border-border shadow-card;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
