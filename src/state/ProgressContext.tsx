@@ -1,31 +1,74 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { PetMood, Progress } from '../lib/types'
-import { clearProgress, defaultProgress, loadProgress, saveProgress } from '../lib/storage'
-import { dateKey, yesterdayKey } from '../lib/date'
-import { MORNING_TASKS } from '../lib/tasks'
+import type { FocusLength, PetMood, Progress } from '../lib/types'
+import { clearProgress, defaultProgress, emptyDay, loadProgress, saveProgress } from '../lib/storage'
+import { dateKey } from '../lib/date'
+import {
+  alarmTimestamp,
+  dailyXp,
+  dayHadActivity,
+  PROMISE_LOCK_GRACE_MS,
+  promiseLockTime,
+  shouldLockPromises,
+  type DailyXp,
+} from '../lib/rules'
 
-/** Start a fresh checklist when the stored day isn't today; break stale streaks. */
-function rollOverDay(p: Progress, now = new Date()): Progress {
-  const today = dateKey(now)
+/**
+ * Bring stored progress up to date with the clock:
+ * 1. New day → bank yesterday's Pet XP (lifetime, never lost) and start a fresh day.
+ *    Missed days simply produce no XP; nothing is taken away.
+ * 2. A running focus timer whose end time has passed → record the completed session.
+ * 3. Apply the promise-locking rule.
+ * Returns the same object when nothing changed, so React can skip re-renders.
+ */
+function normalize(p: Progress, now: number): Progress {
   let next = p
-  if (p.today.date !== today) {
-    next = { ...next, today: { date: today, completedTaskIds: [] } }
+  const today = dateKey(new Date(now))
+  if (next.today.date !== today) {
+    const old = next.today
+    next = {
+      ...next,
+      bankedXp: next.bankedXp + dailyXp(old).total,
+      daysActive: next.daysActive + (dayHadActivity(old) ? 1 : 0),
+      today: emptyDay(today, next.wakeTime),
+    }
   }
-  const streakAlive = p.lastCompletedDate === today || p.lastCompletedDate === yesterdayKey(now)
-  if (!streakAlive && next.streak !== 0) {
-    next = { ...next, streak: 0 }
+  const f = next.activeFocus
+  if (f && f.endsAt !== null && now >= f.endsAt) {
+    next = {
+      ...next,
+      activeFocus: null,
+      today: {
+        ...next.today,
+        focusSessions: [...next.today.focusSessions, { minutes: f.minutes, completedAt: f.endsAt }],
+      },
+    }
+  }
+  if (shouldLockPromises(next.today, now)) {
+    next = { ...next, today: { ...next.today, promisesLockedAt: promiseLockTime(next.today) } }
   }
   return next
 }
 
 interface ProgressApi {
   progress: Progress
-  completedCount: number
-  totalTasks: number
-  allDone: boolean
+  now: number
+  xp: DailyXp
+  lifetimeXp: number
   mood: PetMood
-  isDone: (taskId: string) => boolean
-  toggleTask: (taskId: string) => void
+  promisesLocked: boolean
+  /** When promises will lock automatically (alarm + 15 min), if that's still ahead. */
+  autoLockAt: number | null
+  savedOnDevice: boolean
+  online: boolean
+  setWakeTime: (time: string | null) => void
+  confirmAwake: () => void
+  setPromiseText: (index: number, text: string) => void
+  togglePromise: (index: number) => void
+  startFocus: (minutes: FocusLength) => void
+  pauseFocus: () => void
+  resumeFocus: () => void
+  cancelFocus: () => void
+  checkInBedtime: () => void
   renamePet: (name: string) => void
   resetProgress: () => void
 }
@@ -33,46 +76,135 @@ interface ProgressApi {
 const ProgressContext = createContext<ProgressApi | null>(null)
 
 export function ProgressProvider({ children }: { children: ReactNode }) {
-  const [progress, setProgress] = useState<Progress>(() => rollOverDay(loadProgress()))
+  const [progress, setProgress] = useState<Progress>(() => normalize(loadProgress(), Date.now()))
+  const [now, setNow] = useState(() => Date.now())
+  const [savedOnDevice, setSavedOnDevice] = useState(true)
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
 
-  useEffect(() => saveProgress(progress), [progress])
+  // Save on every change — including each keystroke in a promise — so nothing waits on the network.
+  useEffect(() => setSavedOnDevice(saveProgress(progress)), [progress])
 
-  // If the app stays open past midnight, roll over when the user comes back.
+  // Clock: tick every second while a focus timer runs, otherwise every 15 s (for the lock rule & day rollover).
+  const timerRunning = progress.activeFocus?.endsAt != null
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') setProgress((p) => rollOverDay(p))
-    }
+    const id = window.setInterval(() => setNow(Date.now()), timerRunning ? 1000 : 15000)
+    return () => window.clearInterval(id)
+  }, [timerRunning])
+
+  useEffect(() => {
+    const wake = () => setNow(Date.now())
+    const onVisible = () => document.visibilityState === 'visible' && wake()
+    const onOnline = () => setOnline(true)
+    const onOffline = () => setOnline(false)
     document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', wake)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', wake)
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
   }, [])
 
-  const toggleTask = useCallback((taskId: string) => {
-    const task = MORNING_TASKS.find((t) => t.id === taskId)
-    if (!task) return
-    setProgress((prev) => {
-      const p = rollOverDay(prev)
-      const done = p.today.completedTaskIds.includes(taskId)
-      const completedTaskIds = done
-        ? p.today.completedTaskIds.filter((id) => id !== taskId)
-        : [...p.today.completedTaskIds, taskId]
-      let next: Progress = {
-        ...p,
-        totalXp: Math.max(0, p.totalXp + (done ? -task.xp : task.xp)),
-        today: { ...p.today, completedTaskIds },
-      }
-      // Count the streak once per day, the first time every task is done.
-      const allDone = MORNING_TASKS.every((t) => completedTaskIds.includes(t.id))
-      if (allDone && next.lastCompletedDate !== next.today.date) {
-        next = { ...next, streak: next.streak + 1, lastCompletedDate: next.today.date }
-      }
-      return next
-    })
+  useEffect(() => setProgress((p) => normalize(p, now)), [now])
+
+  /** Run an update against up-to-date state. */
+  const update = useCallback((fn: (p: Progress, t: number) => Progress) => {
+    const t = Date.now()
+    setNow(t) // keep derived views (e.g. the focus countdown) in step with the action
+    setProgress((prev) => normalize(fn(normalize(prev, t), t), t))
   }, [])
 
-  const renamePet = useCallback((name: string) => {
-    const trimmed = name.trim().slice(0, 24)
-    if (trimmed) setProgress((p) => ({ ...p, petName: trimmed }))
-  }, [])
+  const setWakeTime = useCallback(
+    (time: string | null) =>
+      update((p, t) => {
+        const day = p.today
+        const currentAlarm = alarmTimestamp(day)
+        const candidate = { ...day, alarmTime: time }
+        const newAlarm = alarmTimestamp(candidate)
+        // Change today's schedule only if today's alarm hasn't rung yet and the new one wouldn't lock
+        // promises instantly. Otherwise the new time starts tomorrow.
+        const applyToday =
+          day.promisesLockedAt === null &&
+          (currentAlarm === null || t < currentAlarm) &&
+          (newAlarm === null || t < newAlarm + PROMISE_LOCK_GRACE_MS)
+        return { ...p, wakeTime: time, today: applyToday ? candidate : day }
+      }),
+    [update],
+  )
+
+  const confirmAwake = useCallback(
+    () => update((p, t) => (p.today.awakeAt !== null ? p : { ...p, today: { ...p.today, awakeAt: t } })),
+    [update],
+  )
+
+  const setPromiseText = useCallback(
+    (index: number, text: string) =>
+      update((p) => {
+        if (p.today.promisesLockedAt !== null) return p
+        const promises = [...p.today.promises] as Progress['today']['promises']
+        promises[index] = { ...promises[index], text: text.slice(0, 120) }
+        return { ...p, today: { ...p.today, promises } }
+      }),
+    [update],
+  )
+
+  const togglePromise = useCallback(
+    (index: number) =>
+      update((p) => {
+        const current = p.today.promises[index]
+        if (p.today.promisesLockedAt === null || !current.text.trim()) return p
+        const promises = [...p.today.promises] as Progress['today']['promises']
+        promises[index] = { ...current, done: !current.done }
+        return { ...p, today: { ...p.today, promises } }
+      }),
+    [update],
+  )
+
+  const startFocus = useCallback(
+    (minutes: FocusLength) =>
+      update((p, t) =>
+        p.activeFocus ? p : { ...p, activeFocus: { minutes, endsAt: t + minutes * 60_000, remainingMs: null } },
+      ),
+    [update],
+  )
+
+  const pauseFocus = useCallback(
+    () =>
+      update((p, t) => {
+        const f = p.activeFocus
+        if (!f || f.endsAt === null) return p
+        return { ...p, activeFocus: { ...f, endsAt: null, remainingMs: Math.max(0, f.endsAt - t) } }
+      }),
+    [update],
+  )
+
+  const resumeFocus = useCallback(
+    () =>
+      update((p, t) => {
+        const f = p.activeFocus
+        if (!f || f.remainingMs === null) return p
+        return { ...p, activeFocus: { ...f, endsAt: t + f.remainingMs, remainingMs: null } }
+      }),
+    [update],
+  )
+
+  const cancelFocus = useCallback(() => update((p) => ({ ...p, activeFocus: null })), [update])
+
+  const checkInBedtime = useCallback(
+    () => update((p, t) => (p.today.bedtimeAt !== null ? p : { ...p, today: { ...p.today, bedtimeAt: t } })),
+    [update],
+  )
+
+  const renamePet = useCallback(
+    (name: string) => {
+      const trimmed = name.trim().slice(0, 24)
+      if (trimmed) update((p) => ({ ...p, petName: trimmed }))
+    },
+    [update],
+  )
 
   const resetProgress = useCallback(() => {
     clearProgress()
@@ -80,23 +212,51 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const api = useMemo<ProgressApi>(() => {
-    const completed = progress.today.completedTaskIds
-    const completedCount = MORNING_TASKS.filter((t) => completed.includes(t.id)).length
-    const totalTasks = MORNING_TASKS.length
-    const ratio = completedCount / totalTasks
-    const mood: PetMood = ratio >= 1 ? 'happy' : ratio > 0 ? 'waking' : 'sleepy'
+    const day = progress.today
+    const xp = dailyXp(day)
+    const mood: PetMood = day.awakeAt === null ? 'sleepy' : xp.total >= 60 ? 'happy' : 'waking'
+    const alarm = alarmTimestamp(day)
+    const autoLockAt =
+      day.promisesLockedAt === null && alarm !== null && day.awakeAt === null ? alarm + PROMISE_LOCK_GRACE_MS : null
     return {
       progress,
-      completedCount,
-      totalTasks,
-      allDone: completedCount === totalTasks,
+      now,
+      xp,
+      lifetimeXp: progress.bankedXp + xp.total,
       mood,
-      isDone: (id) => completed.includes(id),
-      toggleTask,
+      promisesLocked: day.promisesLockedAt !== null,
+      autoLockAt,
+      savedOnDevice,
+      online,
+      setWakeTime,
+      confirmAwake,
+      setPromiseText,
+      togglePromise,
+      startFocus,
+      pauseFocus,
+      resumeFocus,
+      cancelFocus,
+      checkInBedtime,
       renamePet,
       resetProgress,
     }
-  }, [progress, toggleTask, renamePet, resetProgress])
+  }, [
+    progress,
+    now,
+    savedOnDevice,
+    online,
+    setWakeTime,
+    confirmAwake,
+    setPromiseText,
+    togglePromise,
+    startFocus,
+    pauseFocus,
+    resumeFocus,
+    cancelFocus,
+    checkInBedtime,
+    renamePet,
+    resetProgress,
+  ])
 
   return <ProgressContext.Provider value={api}>{children}</ProgressContext.Provider>
 }

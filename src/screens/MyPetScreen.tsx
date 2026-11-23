@@ -1,16 +1,16 @@
 import { useState, type FormEvent } from 'react'
 import { PetAvatar } from '../components/PetAvatar'
 import { ProgressBar } from '../components/ProgressBar'
-import { levelFromXp, XP_PER_LEVEL } from '../lib/tasks'
+import { levelFromXp, XP_PER_LEVEL } from '../lib/rules'
 import { useProgress } from '../state/ProgressContext'
 
 export function MyPetScreen() {
-  const { progress, mood, renamePet, resetProgress } = useProgress()
-  const { level, intoLevel, toNext } = levelFromXp(progress.totalXp)
+  const { progress, mood, lifetimeXp, renamePet, resetProgress } = useProgress()
+  const { level, intoLevel, toNext } = levelFromXp(lifetimeXp)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(progress.petName)
 
-  const moodText = { sleepy: 'Sleepy 😴', waking: 'Waking up 🌤️', happy: 'Happy 😊' }[mood]
+  const moodText = { sleepy: 'Sleepy 😴', waking: 'Content 🌤️', happy: 'Happy 😊' }[mood]
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -67,22 +67,25 @@ export function MyPetScreen() {
 
       <section className="grid grid-cols-2 gap-3">
         <div className="card p-4">
-          <p className="text-sm font-bold text-ink-muted">Streak</p>
-          <p className="text-2xl font-extrabold">🔥 {progress.streak}</p>
+          <p className="text-sm font-bold text-ink-muted">Days together</p>
+          <p className="text-2xl font-extrabold">📅 {progress.daysActive}</p>
         </div>
         <div className="card p-4">
-          <p className="text-sm font-bold text-ink-muted">Total XP</p>
-          <p className="text-2xl font-extrabold">⭐ {progress.totalXp}</p>
+          <p className="text-sm font-bold text-ink-muted">Lifetime Pet XP</p>
+          <p className="text-2xl font-extrabold">⭐ {lifetimeXp}</p>
         </div>
       </section>
 
-      <p className="text-center text-sm text-ink-muted">More pet care — feeding, outfits and evolutions — is coming soon.</p>
+      <p className="text-center text-sm text-ink-muted">
+        Pet XP is lifetime progress and never resets. Missed days are fine — {progress.petName} is always happy to
+        see you.
+      </p>
 
       <div className="pt-2 text-center">
         <button
           type="button"
           onClick={() => {
-            if (window.confirm('Reset all test progress? This clears your streak, XP and pet name.')) resetProgress()
+            if (window.confirm("Reset all test progress? This clears all Pet XP, today's routine and your pet's name.")) resetProgress()
           }}
           className="text-sm font-bold text-berry hover:underline"
         >

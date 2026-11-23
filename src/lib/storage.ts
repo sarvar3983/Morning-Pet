@@ -1,55 +1,88 @@
-import type { Progress } from './types'
+import type { DayState, Progress } from './types'
 import { dateKey } from './date'
 
 const STORAGE_KEY = 'morning-pet:progress'
 
-export function defaultProgress(): Progress {
+export function emptyDay(date: string, alarmTime: string | null): DayState {
   return {
-    version: 1,
-    petName: 'Sunny',
-    totalXp: 0,
-    streak: 0,
-    lastCompletedDate: null,
-    today: { date: dateKey(), completedTaskIds: [] },
+    date,
+    alarmTime,
+    awakeAt: null,
+    promises: [
+      { text: '', done: false },
+      { text: '', done: false },
+      { text: '', done: false },
+    ],
+    promisesLockedAt: null,
+    focusSessions: [],
+    bedtimeAt: null,
   }
 }
 
-function isProgress(value: unknown): value is Progress {
+export function defaultProgress(): Progress {
+  return {
+    version: 2,
+    petName: 'Sunny',
+    wakeTime: null,
+    bankedXp: 0,
+    daysActive: 0,
+    today: emptyDay(dateKey(), null),
+    activeFocus: null,
+  }
+}
+
+function isProgressV2(value: unknown): value is Progress {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   const today = v.today as Record<string, unknown> | undefined
   return (
-    v.version === 1 &&
+    v.version === 2 &&
     typeof v.petName === 'string' &&
-    typeof v.totalXp === 'number' &&
-    typeof v.streak === 'number' &&
-    (v.lastCompletedDate === null || typeof v.lastCompletedDate === 'string') &&
+    typeof v.bankedXp === 'number' &&
+    typeof v.daysActive === 'number' &&
     !!today &&
     typeof today.date === 'string' &&
-    Array.isArray(today.completedTaskIds)
+    Array.isArray(today.promises) &&
+    today.promises.length === 3 &&
+    Array.isArray(today.focusSessions)
   )
 }
 
+/** v1 (checklist prototype) → v2: keep pet name and lifetime XP, start a fresh day. */
+function migrate(value: unknown): Progress | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  if (v.version === 1 && typeof v.petName === 'string' && typeof v.totalXp === 'number') {
+    return { ...defaultProgress(), petName: v.petName, bankedXp: Math.max(0, v.totalXp) }
+  }
+  return null
+}
+
 /**
- * localStorage can be missing or throw (private mode, blocked storage),
- * so every access is guarded and the app falls back to fresh progress.
+ * All progress — including promises as they are typed — is written to this
+ * device's localStorage immediately, so nothing depends on a network connection.
+ * localStorage can be missing or throw (private mode, blocked storage), so every
+ * access is guarded and the app falls back to in-memory progress.
  */
 export function loadProgress(): Progress {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return defaultProgress()
     const parsed: unknown = JSON.parse(raw)
-    return isProgress(parsed) ? parsed : defaultProgress()
+    if (isProgressV2(parsed)) return parsed
+    return migrate(parsed) ?? defaultProgress()
   } catch {
     return defaultProgress()
   }
 }
 
-export function saveProgress(progress: Progress): void {
+/** Returns false when the device refused to store the data. */
+export function saveProgress(progress: Progress): boolean {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
+    return true
   } catch {
-    // Storage unavailable — progress lives in memory for this session only.
+    return false
   }
 }
 

@@ -19,3 +19,23 @@ export function greeting(d: Date = new Date()): string {
   if (h < 18) return 'Good afternoon'
   return 'Good evening'
 }
+
+/** "7:04 AM" / "07:04" depending on the user's locale. */
+export function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Format an "HH:MM" string in the user's locale. */
+export function formatHHMM(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number)
+  const d = new Date()
+  d.setHours(h, m, 0, 0)
+  return formatTime(d.getTime())
+}
+
+export function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000))
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}

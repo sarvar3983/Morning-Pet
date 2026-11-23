@@ -50,9 +50,23 @@ All colors are CSS variables in `src/index.css` (`--mp-*`) with light and dark v
 
 The current palette and pet art are **placeholders** ("warm sunrise"). Replace them with the official Morning Pet brand assets when available.
 
-## Progress rules (prototype)
+## Daily routine (Morning Pet v2.1)
 
-- Each task is worth 20 XP; every 100 XP is a level.
-- Completing all tasks in a day extends the streak; missing a day resets it.
-- The checklist resets at local midnight.
-- Data is stored under the `morning-pet:progress` key. **My Pet → Reset test progress** clears it.
+All rules live in `src/lib/rules.ts`. Daily maximum: **100 Pet XP**.
+
+| Step | Pet XP |
+| --- | --- |
+| Wake-up confirmation | 20 |
+| Three promises (10 each, ticked after they lock) | 30 |
+| Focus sessions (15 / 25 / 45 min) | up to 40 |
+| Bedtime check-in | 10 |
+
+- **Promise lock:** promises lock when the user confirms they're awake or 15 minutes after the scheduled wake-up time, whichever comes first. After that they can be ticked but not edited.
+- **Pet XP** is lifetime progression and never resets. Each day's XP is banked at local midnight.
+- **League Points and Acorns** are separate systems and are not derived from Pet XP (not built yet).
+- **Non-punitive:** missed days and unkept promises cost nothing; there are no streaks to lose and the pet never gets sick.
+- **Focus timer** uses wall-clock end times, so it keeps counting through reloads and background tabs.
+- **No real alarms:** the wake-up time is a schedule, not an alarm. A web page can't reliably wake anyone, and the app says so.
+- **Saving:** everything, including each keystroke in a promise, is saved to `localStorage` (`morning-pet:progress`) immediately, with no network needed. **My Pet → Reset test progress** clears it.
+
+> `FOCUS_XP` in `rules.ts` is a placeholder (15→10, 25→20, 45→30) until the approved v2.1 reward table is supplied.

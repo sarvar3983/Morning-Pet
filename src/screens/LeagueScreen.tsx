@@ -1,9 +1,7 @@
-import { levelFromXp } from '../lib/tasks'
 import { useProgress } from '../state/ProgressContext'
 
 export function LeagueScreen() {
   const { progress } = useProgress()
-  const { level } = levelFromXp(progress.totalXp)
 
   return (
     <div className="space-y-5">
@@ -18,9 +16,18 @@ export function LeagueScreen() {
         </span>
         <div className="flex-1">
           <p className="font-extrabold">You &amp; {progress.petName}</p>
-          <p className="text-sm text-ink-muted">Level {level}</p>
+          <p className="text-sm text-ink-muted">This week</p>
         </div>
-        <p className="text-lg font-extrabold">⭐ {progress.totalXp}</p>
+        <dl className="text-right text-sm">
+          <div>
+            <dt className="inline text-ink-muted">League Points </dt>
+            <dd className="inline font-extrabold">—</dd>
+          </div>
+          <div>
+            <dt className="inline text-ink-muted">Acorns </dt>
+            <dd className="inline font-extrabold">—</dd>
+          </div>
+        </dl>
       </section>
 
       <section className="card p-6 text-center">
@@ -29,8 +36,8 @@ export function LeagueScreen() {
         </p>
         <h2 className="mt-2 font-extrabold">Leagues are coming soon</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          Weekly leaderboards with friends and other Morning Pet players will appear here. Your XP is already being
-          counted.
+          Weekly League Points and Acorns are separate from your pet's lifetime Pet XP. They'll appear here once leagues
+          launch.
         </p>
       </section>
     </div>
