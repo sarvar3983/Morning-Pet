@@ -1,5 +1,5 @@
 import type { DayState, NextDayPlan, Progress } from './types'
-import { dateKey } from './date'
+import { dayKeyAt } from './rules'
 
 const STORAGE_KEY = 'morning-pet:progress'
 
@@ -24,23 +24,25 @@ export function emptyDay(date: string, alarmTime: string | null, plan: NextDayPl
 
 export function defaultProgress(): Progress {
   return {
-    version: 3,
+    version: 4,
+    setupDone: false,
     petName: 'Sunny',
     wakeTime: null,
     nextDay: null,
     bankedXp: 0,
     daysActive: 0,
-    today: emptyDay(dateKey(), null),
+    today: emptyDay(dayKeyAt(Date.now()), null),
     activeFocus: null,
   }
 }
 
-function isProgressV3(value: unknown): value is Progress {
+function isProgressV4(value: unknown): value is Progress {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   const today = v.today as Record<string, unknown> | undefined
   return (
-    v.version === 3 &&
+    v.version === 4 &&
+    typeof v.setupDone === 'boolean' &&
     typeof v.petName === 'string' &&
     typeof v.bankedXp === 'number' &&
     typeof v.daysActive === 'number' &&
@@ -53,21 +55,25 @@ function isProgressV3(value: unknown): value is Progress {
 }
 
 /**
+ * Upgrade older saved data one version at a time:
  * v1 (checklist prototype) → keep pet name and lifetime XP, start a fresh day.
  * v2 (first daily routine) → add the bedtime plan fields.
+ * v3 → add setupDone (already set up if a wake-up time was chosen).
  */
 function migrate(value: unknown): Progress | null {
   if (!value || typeof value !== 'object') return null
-  const v = value as Record<string, unknown>
-  if (v.version === 2 && typeof v.petName === 'string' && typeof v.bankedXp === 'number' && v.today) {
-    const today = v.today as DayState
-    const candidate = { ...v, version: 3, nextDay: null, today: { ...today, promisesPlanned: false } }
-    if (isProgressV3(candidate)) return candidate
-  }
+  let v = value as Record<string, unknown>
   if (v.version === 1 && typeof v.petName === 'string' && typeof v.totalXp === 'number') {
-    return { ...defaultProgress(), petName: v.petName, bankedXp: Math.max(0, v.totalXp) }
+    const fresh = defaultProgress()
+    return { ...fresh, petName: v.petName, bankedXp: Math.max(0, v.totalXp) }
   }
-  return null
+  if (v.version === 2 && v.today && typeof v.today === 'object') {
+    v = { ...v, version: 3, nextDay: null, today: { ...(v.today as DayState), promisesPlanned: false } }
+  }
+  if (v.version === 3) {
+    v = { ...v, version: 4, setupDone: typeof v.wakeTime === 'string' }
+  }
+  return isProgressV4(v) ? v : null
 }
 
 /**
@@ -81,7 +87,7 @@ export function loadProgress(): Progress {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return defaultProgress()
     const parsed: unknown = JSON.parse(raw)
-    if (isProgressV3(parsed)) return parsed
+    if (isProgressV4(parsed)) return parsed
     return migrate(parsed) ?? defaultProgress()
   } catch {
     return defaultProgress()

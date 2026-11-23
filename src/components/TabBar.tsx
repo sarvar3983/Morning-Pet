@@ -27,7 +27,7 @@ export function TabBar({ active, onChange }: Props) {
           Morning <span className="text-sun-strong">Pet</span>
         </span>
       </div>
-      <ul className="mx-auto flex max-w-md md:max-w-none md:flex-col md:gap-1 md:px-3">
+      <ul className="mx-auto flex h-(--tabbar-h) max-w-md md:h-auto md:max-w-none md:flex-col md:gap-1 md:px-3">
         {TABS.map((tab) => {
           const isActive = tab.id === active
           return (
@@ -36,7 +36,7 @@ export function TabBar({ active, onChange }: Props) {
                 type="button"
                 onClick={() => onChange(tab.id)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`flex w-full flex-col items-center gap-0.5 py-2.5 text-xs font-bold transition-colors
+                className={`flex h-full w-full flex-col items-center justify-center gap-0.5 text-xs font-bold transition-colors
                             md:flex-row md:gap-3 md:rounded-2xl md:px-4 md:py-3 md:text-base
                             ${isActive ? 'text-ink md:bg-surface-muted' : 'text-ink-muted hover:text-ink'}`}
               >

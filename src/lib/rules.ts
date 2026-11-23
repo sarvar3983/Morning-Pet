@@ -1,4 +1,5 @@
 import type { DayState, FocusLength } from './types'
+import { addDays, dateKey } from './date'
 
 /*
  * Morning Pet daily rules (v2 prototype + v2.1) — Pet XP only.
@@ -30,14 +31,34 @@ export const FOCUS_XP: Record<FocusLength, number> = {
 export const PROMISE_LOCK_GRACE_MS = 15 * 60 * 1000
 
 /**
- * Wake-up reward window: "I'm awake" earns XP only between these offsets from the chosen time.
- * The late edge matches the promise-lock deadline. ASSUMPTION — the early edge (60 min) is not
- * specified in v2/v2.1; adjust here if the original prototype says otherwise.
+ * Wake-up reward window: "I'm awake" earns XP only from 15 minutes before to 15 minutes after
+ * the chosen time. The late edge matches the promise-lock deadline.
  */
-export const WAKE_WINDOW_BEFORE_MS = 60 * 60 * 1000
+export const WAKE_WINDOW_BEFORE_MS = 15 * 60 * 1000
 export const WAKE_WINDOW_AFTER_MS = PROMISE_LOCK_GRACE_MS
 
-/** The bedtime check-in opens at this local hour (19 = 7 PM) and stays open until midnight. */
+/**
+ * A Morning Pet "day" runs from 4 AM to 4 AM, not midnight to midnight, so someone going to bed
+ * after midnight is still finishing the same day: their bedtime check-in, focus sessions and XP all
+ * count toward it, and the plan they make is for the morning ahead.
+ */
+export const DAY_START_HOUR = 4
+
+/** Wake-up times must fall inside a day: from 04:00 to 23:59. */
+export const EARLIEST_WAKE_TIME = `${String(DAY_START_HOUR).padStart(2, '0')}:00`
+
+export function isValidWakeTime(hhmm: string): boolean {
+  return /^\d{2}:\d{2}$/.test(hhmm) && hhmm >= EARLIEST_WAKE_TIME
+}
+
+/** The Morning Pet day a moment belongs to. Between midnight and 4 AM, that's the previous date. */
+export function dayKeyAt(ts: number): string {
+  const d = new Date(ts)
+  const key = dateKey(d)
+  return d.getHours() < DAY_START_HOUR ? addDays(key, -1) : key
+}
+
+/** The bedtime check-in opens at 7 PM and closes when the day ends at 4 AM. */
 export const BEDTIME_OPENS_HOUR = 19
 
 /** Epoch ms of the wake-up time on the given day, or null if no wake-up time is set. */
@@ -74,16 +95,27 @@ export function wakeWindow(day: DayState): WakeWindow | null {
   return { opens: alarm - WAKE_WINDOW_BEFORE_MS, closes: alarm + WAKE_WINDOW_AFTER_MS }
 }
 
-/** Was "I'm awake" (at time t) inside today's wake-up window? */
+/**
+ * Was "I'm awake" (at time t) inside today's wake-up window? Compared by the minute, the way people
+ * read a clock: for a 7:00 wake-up time, any tap from 6:45:00 through 7:15:59 counts.
+ */
 export function isOnTime(day: DayState, t: number): boolean {
   const w = wakeWindow(day)
-  return w !== null && t >= w.opens && t <= w.closes
+  if (w === null) return false
+  const minute = Math.floor(t / 60_000) * 60_000
+  return minute >= w.opens && minute <= w.closes
 }
 
-/** Bedtime check-in is open from 7 PM until the end of the day. */
+/** Bedtime check-in opens at 7 PM on the day's date… */
 export function bedtimeOpensAt(day: DayState): number {
   const [y, mo, d] = day.date.split('-').map(Number)
   return new Date(y, mo - 1, d, BEDTIME_OPENS_HOUR, 0).getTime()
+}
+
+/** …and closes at 4 AM the next calendar morning, when the next day begins. */
+export function dayEndsAt(day: DayState): number {
+  const [y, mo, d] = day.date.split('-').map(Number)
+  return new Date(y, mo - 1, d + 1, DAY_START_HOUR, 0).getTime()
 }
 
 export interface DailyXp {

@@ -5,7 +5,7 @@ import { useProgress } from '../../state/ProgressContext'
 import { Note, primaryButton, StepCard } from './StepCard'
 
 export function WakeCard() {
-  const { progress, xp, promisesLocked, confirmAwake } = useProgress()
+  const { progress, xp, promisesLocked, hasWakeSchedule, confirmAwake } = useProgress()
   const { wakeTime, today } = progress
   const awake = today.awakeAt !== null
   const wakeWin = wakeWindow(today)
@@ -25,17 +25,25 @@ export function WakeCard() {
   const bedtimeLabel = formatHHMM(`${BEDTIME_OPENS_HOUR}:00`)
 
   return (
-    <StepCard step={1} title="Wake up" icon="⏰" reward={`${xp.wake}/${XP.wake} XP`} done={xp.wake === XP.wake}>
-      <p className="text-sm">
-        {today.alarmTime ? (
-          <>
-            Today&apos;s wake-up time: <strong>{formatHHMM(today.alarmTime)}</strong>
-          </>
-        ) : (
-          <>No wake-up time set for today.</>
-        )}
-      </p>
-      {wakeTime && wakeTime !== today.alarmTime && (
+    <StepCard
+      step={1}
+      title="Wake up"
+      icon="⏰"
+      reward={hasWakeSchedule ? `${xp.wake}/${XP.wake} XP` : 'Starts tomorrow'}
+      done={xp.wake === XP.wake}
+    >
+      {hasWakeSchedule ? (
+        <p className="text-sm">
+          Today&apos;s wake-up time: <strong>{formatHHMM(today.alarmTime!)}</strong>
+        </p>
+      ) : wakeTime ? (
+        <p className="text-sm">
+          Your first scheduled wake-up is <strong>tomorrow at {formatHHMM(wakeTime)}</strong>. Wake-up XP starts then.
+        </p>
+      ) : (
+        <p className="text-sm">No wake-up time set yet.</p>
+      )}
+      {hasWakeSchedule && wakeTime && wakeTime !== today.alarmTime && (
         <p className="mt-1 text-sm text-ink-muted">From tomorrow: {formatHHMM(wakeTime)}</p>
       )}
       {!wakeTime && (
@@ -55,16 +63,16 @@ export function WakeCard() {
               <strong>☀️ Awake at {formatTime(today.awakeAt!)}.</strong>{' '}
               {wakeWin
                 ? `That's outside today's wake-up window, so no wake-up XP today. Everything else still counts.`
-                : 'Wake-up XP needs a wake-up time. Everything else still counts.'}
+                : 'Wake-up XP starts with your first scheduled wake-up. Everything else counts today.'}
             </p>
           )
         ) : (
           <>
-            {wakeWin && (
-              <p className="mb-3 text-sm text-ink-muted">
-                Tap between {formatTime(wakeWin.opens)} and {formatTime(wakeWin.closes)} for +{XP.wake} Pet XP.
-              </p>
-            )}
+            <p className="mb-3 text-sm text-ink-muted">
+              {wakeWin
+                ? `Tap between ${formatTime(wakeWin.opens)} and ${formatTime(wakeWin.closes)} for +${XP.wake} Pet XP.`
+                : "Tap when you're up to lock today's promises so you can tick them off."}
+            </p>
             {confirming && (
               <p role="alert" className="mb-3 rounded-2xl bg-sun/20 p-3 text-sm">
                 Confirming you&apos;re awake locks your promises. You&apos;ve written {written} of {XP.promiseCount}.

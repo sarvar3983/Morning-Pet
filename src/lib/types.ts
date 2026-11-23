@@ -44,7 +44,9 @@ export interface NextDayPlan {
 
 export interface Progress {
   /** Bump when the stored shape changes so old data can be migrated. */
-  version: 3
+  version: 4
+  /** False until the user has chosen their first wake-up time in setup. */
+  setupDone: boolean
   petName: string
   /** Preferred wake-up time ("HH:MM"). Set at bedtime; becomes each new day's alarmTime. */
   wakeTime: string | null

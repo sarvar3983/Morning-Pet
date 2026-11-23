@@ -2,6 +2,7 @@ import { formatTime } from '../../lib/date'
 import { XP } from '../../lib/rules'
 import { useProgress } from '../../state/ProgressContext'
 import { Note, primaryButton, SaveStatus, StepCard } from './StepCard'
+import { WakeTimeInput } from './WakeTimeInput'
 
 export function BedtimeCard() {
   const {
@@ -34,15 +35,7 @@ export function BedtimeCard() {
           )}
 
           <h3 className="mb-2 text-sm font-extrabold">Plan tomorrow</h3>
-          <label className="flex items-center justify-between gap-3">
-            <span className="text-sm font-bold">Tomorrow&apos;s wake-up time</span>
-            <input
-              type="time"
-              value={progress.wakeTime ?? ''}
-              onChange={(e) => setWakeTime(e.target.value || null)}
-              className="rounded-xl border border-border bg-bg px-3 py-2 font-bold"
-            />
-          </label>
+          <WakeTimeInput label="Tomorrow's wake-up time" value={progress.wakeTime} onChange={setWakeTime} />
 
           <ol className="mt-3 space-y-2">
             {tomorrowPromises.map((text, i) => (
@@ -70,7 +63,8 @@ export function BedtimeCard() {
           )}
           <Note>
             Your plan appears on tomorrow&apos;s Today screen. A new wake-up time starts tomorrow; today&apos;s stays the
-            same. {checkedIn ? 'You can keep editing the plan until midnight.' : 'Planning is optional.'}
+            same. {checkedIn ? 'You can keep editing the plan until 4 AM.' : 'Planning is optional.'} The check-in stays
+            open until 4 AM, so going to bed after midnight still counts for today.
           </Note>
         </>
       )}

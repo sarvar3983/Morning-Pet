@@ -3,14 +3,17 @@ import { ProgressBar } from '../components/ProgressBar'
 import { BedtimeCard } from '../components/today/BedtimeCard'
 import { FocusCard } from '../components/today/FocusCard'
 import { PromisesCard } from '../components/today/PromisesCard'
+import { SetupCard } from '../components/today/SetupCard'
 import { WakeCard } from '../components/today/WakeCard'
 import { greeting } from '../lib/date'
 import { XP } from '../lib/rules'
 import { useProgress } from '../state/ProgressContext'
 
 export function TodayScreen() {
-  const { progress, xp, mood } = useProgress()
+  const { progress, xp, mood, hasWakeSchedule } = useProgress()
   const name = progress.petName
+
+  if (!progress.setupDone) return <SetupCard />
 
   const subtitle =
     xp.total >= XP.dailyMax
@@ -41,16 +44,25 @@ export function TodayScreen() {
         </div>
         <ProgressBar value={xp.total} max={XP.dailyMax} label="Pet XP earned today" tone={xp.total >= XP.dailyMax ? 'leaf' : 'sun'} />
         <dl className="mt-3 grid grid-cols-4 gap-1 text-center text-xs">
-          {[
-            ['Wake', xp.wake, XP.wake],
-            ['Promises', xp.promises, XP.perPromise * XP.promiseCount],
-            ['Focus', xp.focus, XP.focusDailyMax],
-            ['Bedtime', xp.bedtime, XP.bedtime],
-          ].map(([label, value, max]) => (
+          {(
+            [
+              ['Wake', hasWakeSchedule ? `${xp.wake}/${XP.wake}` : '—'],
+              ['Promises', `${xp.promises}/${XP.perPromise * XP.promiseCount}`],
+              ['Focus', `${xp.focus}/${XP.focusDailyMax}`],
+              ['Bedtime', `${xp.bedtime}/${XP.bedtime}`],
+            ] as const
+          ).map(([label, value]) => (
             <div key={label} className="rounded-xl bg-surface-muted py-2">
               <dt className="font-bold text-ink-muted">{label}</dt>
               <dd className="font-extrabold">
-                {value}/{max}
+                {value === '—' ? (
+                  <>
+                    <span aria-hidden>—</span>
+                    <span className="sr-only">starts tomorrow</span>
+                  </>
+                ) : (
+                  value
+                )}
               </dd>
             </div>
           ))}

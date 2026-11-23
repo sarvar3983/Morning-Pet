@@ -24,6 +24,8 @@
   --mp-sky: #6fb7e9;        /* secondary accent */
   --mp-leaf: #5cb87a;       /* success / completed */
   --mp-berry: #e8607a;      /* alerts / destructive */
+  /* Height of the mobile bottom tab bar, excluding the safe area. Content is padded by this. */
+  --tabbar-h: 4.5rem;
   color-scheme: light;
 }
 
@@ -76,6 +78,15 @@
   body,
   #root {
     min-height: 100%;
+  }
+  /* Keep focused inputs and scrolled-to content clear of the fixed bottom tab bar on mobile. */
+  html {
+    scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1rem);
+  }
+  @media (width >= 48rem) {
+    html {
+      scroll-padding-bottom: 0;
+    }
   }
   body {
     @apply bg-bg text-ink font-sans antialiased;

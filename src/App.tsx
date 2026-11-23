@@ -33,7 +33,7 @@ export default function App() {
     <ProgressProvider>
       <TabBar active={tab} onChange={setTab} />
       <div className="md:pl-56">
-        <main className="mx-auto max-w-xl px-4 pt-6 pb-28 md:max-w-2xl md:px-10 md:pt-10 md:pb-10">
+        <main className="mx-auto max-w-xl px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+1.5rem)] md:max-w-2xl md:px-10 md:pt-10 md:pb-10">
           {tab === 'today' && <TodayScreen />}
           {tab === 'pet' && <MyPetScreen />}
           {tab === 'league' && <LeagueScreen />}
