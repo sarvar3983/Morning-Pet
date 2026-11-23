@@ -42,3 +42,16 @@ export const primaryButton =
   'w-full rounded-2xl bg-sun px-4 py-3 font-extrabold text-sun-ink transition hover:bg-sun-strong active:scale-[0.98] disabled:opacity-50'
 export const secondaryButton =
   'rounded-2xl border border-border px-4 py-2.5 font-bold transition hover:border-sun active:scale-[0.98]'
+
+/** Tells the user their typing is stored on this device, online or not. */
+export function SaveStatus({ savedOnDevice, online }: { savedOnDevice: boolean; online: boolean }) {
+  return (
+    <p className="mt-1 text-xs font-bold text-ink-muted" aria-live="polite">
+      {!savedOnDevice
+        ? "⚠️ This browser isn't letting Morning Pet save. Keep this tab open."
+        : online
+          ? '✓ Saved on this device'
+          : "📴 You're offline. Promises are still saved on this device."}
+    </p>
+  )
+}

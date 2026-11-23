@@ -1,24 +1,77 @@
 import { formatTime } from '../../lib/date'
 import { XP } from '../../lib/rules'
 import { useProgress } from '../../state/ProgressContext'
-import { primaryButton, StepCard } from './StepCard'
+import { Note, primaryButton, SaveStatus, StepCard } from './StepCard'
 
 export function BedtimeCard() {
-  const { progress, checkInBedtime } = useProgress()
+  const {
+    progress,
+    bedtimeOpen,
+    bedtimeOpensAt,
+    tomorrowPromises,
+    savedOnDevice,
+    online,
+    setWakeTime,
+    setTomorrowPromise,
+    checkInBedtime,
+  } = useProgress()
   const { bedtimeAt } = progress.today
+  const checkedIn = bedtimeAt !== null
 
   return (
-    <StepCard step={4} title="Bedtime check-in" icon="🌙" reward={`${XP.bedtime} XP`} done={bedtimeAt !== null}>
-      {bedtimeAt !== null ? (
-        <p role="status" className="rounded-2xl bg-leaf/15 p-3 text-center font-bold">
-          🌙 Checked in at {formatTime(bedtimeAt)} · +{XP.bedtime} Pet XP. Sleep well!
+    <StepCard step={4} title="Bedtime check-in" icon="🌙" reward={`${XP.bedtime} XP`} done={checkedIn}>
+      {!bedtimeOpen ? (
+        <p className="text-sm text-ink-muted">
+          Opens at {formatTime(bedtimeOpensAt)}. That&apos;s where you&apos;ll set tomorrow&apos;s wake-up time and
+          promises.
         </p>
       ) : (
         <>
-          <p className="mb-3 text-sm text-ink-muted">Check in when you're heading to bed.</p>
-          <button type="button" onClick={checkInBedtime} className={primaryButton}>
-            I'm heading to bed
-          </button>
+          {checkedIn && (
+            <p role="status" className="mb-4 rounded-2xl bg-leaf/15 p-3 text-center font-bold">
+              🌙 Checked in at {formatTime(bedtimeAt)} · +{XP.bedtime} Pet XP. Sleep well!
+            </p>
+          )}
+
+          <h3 className="mb-2 text-sm font-extrabold">Plan tomorrow</h3>
+          <label className="flex items-center justify-between gap-3">
+            <span className="text-sm font-bold">Tomorrow&apos;s wake-up time</span>
+            <input
+              type="time"
+              value={progress.wakeTime ?? ''}
+              onChange={(e) => setWakeTime(e.target.value || null)}
+              className="rounded-xl border border-border bg-bg px-3 py-2 font-bold"
+            />
+          </label>
+
+          <ol className="mt-3 space-y-2">
+            {tomorrowPromises.map((text, i) => (
+              <li key={i}>
+                <label className="sr-only" htmlFor={`tomorrow-promise-${i}`}>
+                  Tomorrow&apos;s promise {i + 1}
+                </label>
+                <input
+                  id={`tomorrow-promise-${i}`}
+                  value={text}
+                  maxLength={120}
+                  placeholder={`Tomorrow's promise ${i + 1}`}
+                  onChange={(e) => setTomorrowPromise(i, e.target.value)}
+                  className="w-full rounded-xl border border-border bg-bg px-3 py-2.5 font-bold placeholder:font-normal"
+                />
+              </li>
+            ))}
+          </ol>
+          <SaveStatus savedOnDevice={savedOnDevice} online={online} />
+
+          {!checkedIn && (
+            <button type="button" onClick={checkInBedtime} className={`${primaryButton} mt-4`}>
+              Check in for bed
+            </button>
+          )}
+          <Note>
+            Your plan appears on tomorrow&apos;s Today screen. A new wake-up time starts tomorrow; today&apos;s stays the
+            same. {checkedIn ? 'You can keep editing the plan until midnight.' : 'Planning is optional.'}
+          </Note>
         </>
       )}
     </StepCard>

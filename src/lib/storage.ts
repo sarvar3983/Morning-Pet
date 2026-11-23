@@ -1,18 +1,21 @@
-import type { DayState, Progress } from './types'
+import type { DayState, NextDayPlan, Progress } from './types'
 import { dateKey } from './date'
 
 const STORAGE_KEY = 'morning-pet:progress'
 
-export function emptyDay(date: string, alarmTime: string | null): DayState {
+/** A new day. Promises come from last night's plan when there is one. */
+export function emptyDay(date: string, alarmTime: string | null, plan: NextDayPlan | null = null): DayState {
+  const texts = plan ? plan.promises : ['', '', '']
   return {
     date,
     alarmTime,
     awakeAt: null,
     promises: [
-      { text: '', done: false },
-      { text: '', done: false },
-      { text: '', done: false },
+      { text: texts[0], done: false },
+      { text: texts[1], done: false },
+      { text: texts[2], done: false },
     ],
+    promisesPlanned: !!plan && plan.promises.some((t) => t.trim() !== ''),
     promisesLockedAt: null,
     focusSessions: [],
     bedtimeAt: null,
@@ -21,9 +24,10 @@ export function emptyDay(date: string, alarmTime: string | null): DayState {
 
 export function defaultProgress(): Progress {
   return {
-    version: 2,
+    version: 3,
     petName: 'Sunny',
     wakeTime: null,
+    nextDay: null,
     bankedXp: 0,
     daysActive: 0,
     today: emptyDay(dateKey(), null),
@@ -31,12 +35,12 @@ export function defaultProgress(): Progress {
   }
 }
 
-function isProgressV2(value: unknown): value is Progress {
+function isProgressV3(value: unknown): value is Progress {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   const today = v.today as Record<string, unknown> | undefined
   return (
-    v.version === 2 &&
+    v.version === 3 &&
     typeof v.petName === 'string' &&
     typeof v.bankedXp === 'number' &&
     typeof v.daysActive === 'number' &&
@@ -48,10 +52,18 @@ function isProgressV2(value: unknown): value is Progress {
   )
 }
 
-/** v1 (checklist prototype) → v2: keep pet name and lifetime XP, start a fresh day. */
+/**
+ * v1 (checklist prototype) → keep pet name and lifetime XP, start a fresh day.
+ * v2 (first daily routine) → add the bedtime plan fields.
+ */
 function migrate(value: unknown): Progress | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
+  if (v.version === 2 && typeof v.petName === 'string' && typeof v.bankedXp === 'number' && v.today) {
+    const today = v.today as DayState
+    const candidate = { ...v, version: 3, nextDay: null, today: { ...today, promisesPlanned: false } }
+    if (isProgressV3(candidate)) return candidate
+  }
   if (v.version === 1 && typeof v.petName === 'string' && typeof v.totalXp === 'number') {
     return { ...defaultProgress(), petName: v.petName, bankedXp: Math.max(0, v.totalXp) }
   }
@@ -69,7 +81,7 @@ export function loadProgress(): Progress {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return defaultProgress()
     const parsed: unknown = JSON.parse(raw)
-    if (isProgressV2(parsed)) return parsed
+    if (isProgressV3(parsed)) return parsed
     return migrate(parsed) ?? defaultProgress()
   } catch {
     return defaultProgress()

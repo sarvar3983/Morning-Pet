@@ -1,12 +1,12 @@
 import { formatTime } from '../../lib/date'
 import { XP } from '../../lib/rules'
 import { useProgress } from '../../state/ProgressContext'
-import { Note, StepCard } from './StepCard'
+import { Note, SaveStatus, StepCard } from './StepCard'
 
 export function PromisesCard() {
   const { progress, xp, promisesLocked, autoLockAt, savedOnDevice, online, setPromiseText, togglePromise } =
     useProgress()
-  const { promises, promisesLockedAt } = progress.today
+  const { promises, promisesLockedAt, promisesPlanned } = progress.today
   const written = promises.filter((p) => p.text.trim())
   const doneCount = written.filter((p) => p.done).length
   const maxXp = XP.perPromise * XP.promiseCount
@@ -21,7 +21,11 @@ export function PromisesCard() {
     >
       {!promisesLocked ? (
         <>
-          <p className="mb-3 text-sm text-ink-muted">Write three small promises to yourself for today.</p>
+          <p className="mb-3 text-sm text-ink-muted">
+            {promisesPlanned
+              ? 'Planned at bedtime last night. You can still adjust them until they lock.'
+              : "You didn't plan promises last night. Write them now, before they lock."}
+          </p>
           <ol className="space-y-2">
             {promises.map((p, i) => (
               <li key={i}>
@@ -46,17 +50,11 @@ export function PromisesCard() {
               : "when you confirm you're awake"}
             . After that you can tick them off, but not change them.
           </Note>
-          <p className="mt-1 text-xs font-bold text-ink-muted" aria-live="polite">
-            {!savedOnDevice
-              ? "⚠️ This browser isn't letting Morning Pet save. Keep this tab open."
-              : online
-                ? '✓ Saved on this device'
-                : "📴 You're offline. Promises are still saved on this device."}
-          </p>
+          <SaveStatus savedOnDevice={savedOnDevice} online={online} />
         </>
       ) : written.length === 0 ? (
         <p className="text-sm text-ink-muted">
-          No promises today, and that's okay. Tomorrow, write them before your wake-up time.
+          No promises today, and that's okay. You can plan tomorrow's at your bedtime check-in.
         </p>
       ) : (
         <>

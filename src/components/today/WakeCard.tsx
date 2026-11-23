@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { formatHHMM, formatTime } from '../../lib/date'
-import { XP } from '../../lib/rules'
+import { BEDTIME_OPENS_HOUR, wakeWindow, XP } from '../../lib/rules'
 import { useProgress } from '../../state/ProgressContext'
 import { Note, primaryButton, StepCard } from './StepCard'
 
 export function WakeCard() {
-  const { progress, promisesLocked, setWakeTime, confirmAwake } = useProgress()
+  const { progress, xp, promisesLocked, confirmAwake } = useProgress()
   const { wakeTime, today } = progress
   const awake = today.awakeAt !== null
+  const wakeWin = wakeWindow(today)
   const [confirming, setConfirming] = useState(false)
   const written = today.promises.filter((p) => p.text.trim()).length
 
@@ -21,36 +22,53 @@ export function WakeCard() {
     confirmAwake()
   }
 
-  const scheduleNote =
-    wakeTime && today.alarmTime !== wakeTime
-      ? today.alarmTime
-        ? `Today's wake-up was ${formatHHMM(today.alarmTime)}. ${formatHHMM(wakeTime)} starts tomorrow.`
-        : `${formatHHMM(wakeTime)} starts tomorrow.`
-      : null
+  const bedtimeLabel = formatHHMM(`${BEDTIME_OPENS_HOUR}:00`)
 
   return (
-    <StepCard step={1} title="Wake up" icon="⏰" reward={`${XP.wake} XP`} done={awake}>
-      <label className="flex items-center justify-between gap-3">
-        <span className="text-sm font-bold">Preferred wake-up time</span>
-        <input
-          type="time"
-          value={wakeTime ?? ''}
-          onChange={(e) => setWakeTime(e.target.value || null)}
-          className="rounded-xl border border-border bg-bg px-3 py-2 font-bold"
-        />
-      </label>
-      {scheduleNote && <Note>{scheduleNote}</Note>}
+    <StepCard step={1} title="Wake up" icon="⏰" reward={`${xp.wake}/${XP.wake} XP`} done={xp.wake === XP.wake}>
+      <p className="text-sm">
+        {today.alarmTime ? (
+          <>
+            Today&apos;s wake-up time: <strong>{formatHHMM(today.alarmTime)}</strong>
+          </>
+        ) : (
+          <>No wake-up time set for today.</>
+        )}
+      </p>
+      {wakeTime && wakeTime !== today.alarmTime && (
+        <p className="mt-1 text-sm text-ink-muted">From tomorrow: {formatHHMM(wakeTime)}</p>
+      )}
+      {!wakeTime && (
+        <p className="mt-1 text-sm text-ink-muted">
+          Choose your wake-up time in tonight&apos;s bedtime check-in (opens at {bedtimeLabel}).
+        </p>
+      )}
 
       <div className="mt-4">
         {awake ? (
-          <p role="status" className="rounded-2xl bg-leaf/15 p-3 text-center font-bold">
-            ☀️ Awake at {formatTime(today.awakeAt!)} · +{XP.wake} Pet XP
-          </p>
+          xp.wake > 0 ? (
+            <p role="status" className="rounded-2xl bg-leaf/15 p-3 text-center font-bold">
+              ☀️ Up on time at {formatTime(today.awakeAt!)} · +{XP.wake} Pet XP
+            </p>
+          ) : (
+            <p role="status" className="rounded-2xl bg-surface-muted p-3 text-center text-sm">
+              <strong>☀️ Awake at {formatTime(today.awakeAt!)}.</strong>{' '}
+              {wakeWin
+                ? `That's outside today's wake-up window, so no wake-up XP today. Everything else still counts.`
+                : 'Wake-up XP needs a wake-up time. Everything else still counts.'}
+            </p>
+          )
         ) : (
           <>
+            {wakeWin && (
+              <p className="mb-3 text-sm text-ink-muted">
+                Tap between {formatTime(wakeWin.opens)} and {formatTime(wakeWin.closes)} for +{XP.wake} Pet XP.
+              </p>
+            )}
             {confirming && (
               <p role="alert" className="mb-3 rounded-2xl bg-sun/20 p-3 text-sm">
-                Confirming you're awake locks your promises. You've written {written} of {XP.promiseCount}.
+                Confirming you&apos;re awake locks your promises. You&apos;ve written {written} of {XP.promiseCount}.
+                This doesn&apos;t affect your wake-up XP.
               </p>
             )}
             <button type="button" onClick={onAwake} className={primaryButton}>
@@ -62,7 +80,7 @@ export function WakeCard() {
                 onClick={() => setConfirming(false)}
                 className="mt-2 w-full py-2 text-sm font-bold text-ink-muted hover:text-ink"
               >
-                Not yet — finish my promises
+                Not yet, finish my promises
               </button>
             )}
           </>
@@ -70,8 +88,8 @@ export function WakeCard() {
       </div>
 
       <Note>
-        ⓘ Morning Pet can't wake you up. A web page can't ring a reliable alarm, so please keep using your phone's
-        alarm clock. The time above sets your schedule and when your promises lock.
+        ⓘ Morning Pet can&apos;t wake you up. A web page can&apos;t ring a reliable alarm, so please keep using your
+        phone&apos;s alarm clock.
       </Note>
     </StepCard>
   )

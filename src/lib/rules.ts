@@ -1,12 +1,14 @@
 import type { DayState, FocusLength } from './types'
 
 /*
- * Morning Pet v2.1 daily rules — Pet XP only.
+ * Morning Pet daily rules (v2 prototype + v2.1) — Pet XP only.
+ * Every reward value and time window lives in this file.
  * Weekly League Points and Acorns are separate systems and must never be
  * derived from these numbers.
  */
 
 export const XP = {
+  /** For confirming you're up within the wake-up window around your chosen time. */
   wake: 20,
   perPromise: 10,
   promiseCount: 3,
@@ -17,21 +19,28 @@ export const XP = {
 
 export const FOCUS_LENGTHS: FocusLength[] = [15, 25, 45]
 
-/**
- * PLACEHOLDER — the approved v2.1 focus reward table was not available.
- * Replace these values with the approved numbers. The daily focus cap
- * (XP.focusDailyMax) is enforced regardless of these values.
- */
+/** Focus rewards per completed session. The 45-minute value is provisional (original range 10–20 XP). */
 export const FOCUS_XP: Record<FocusLength, number> = {
   15: 10,
-  25: 20,
-  45: 30,
+  25: 15,
+  45: 20,
 }
 
-/** Promises lock this long after the scheduled alarm if the user hasn't confirmed they're awake. */
+/** Promises lock this long after the scheduled wake-up time if the user hasn't confirmed they're awake. */
 export const PROMISE_LOCK_GRACE_MS = 15 * 60 * 1000
 
-/** Epoch ms of the alarm on the given day, or null if no alarm is set. */
+/**
+ * Wake-up reward window: "I'm awake" earns XP only between these offsets from the chosen time.
+ * The late edge matches the promise-lock deadline. ASSUMPTION — the early edge (60 min) is not
+ * specified in v2/v2.1; adjust here if the original prototype says otherwise.
+ */
+export const WAKE_WINDOW_BEFORE_MS = 60 * 60 * 1000
+export const WAKE_WINDOW_AFTER_MS = PROMISE_LOCK_GRACE_MS
+
+/** The bedtime check-in opens at this local hour (19 = 7 PM) and stays open until midnight. */
+export const BEDTIME_OPENS_HOUR = 19
+
+/** Epoch ms of the wake-up time on the given day, or null if no wake-up time is set. */
 export function alarmTimestamp(day: DayState): number | null {
   if (!day.alarmTime) return null
   const [h, m] = day.alarmTime.split(':').map(Number)
@@ -39,7 +48,7 @@ export function alarmTimestamp(day: DayState): number | null {
   return new Date(y, mo - 1, d, h, m).getTime()
 }
 
-/** v2.1 lock rule: wake-up confirmation or alarm + 15 min, whichever comes first. */
+/** v2.1 lock rule: wake-up confirmation or wake-up time + 15 min, whichever comes first. */
 export function promiseLockTime(day: DayState): number | null {
   const candidates: number[] = []
   if (day.awakeAt !== null) candidates.push(day.awakeAt)
@@ -54,6 +63,29 @@ export function shouldLockPromises(day: DayState, now: number): boolean {
   return t !== null && now >= t
 }
 
+export interface WakeWindow {
+  opens: number
+  closes: number
+}
+
+export function wakeWindow(day: DayState): WakeWindow | null {
+  const alarm = alarmTimestamp(day)
+  if (alarm === null) return null
+  return { opens: alarm - WAKE_WINDOW_BEFORE_MS, closes: alarm + WAKE_WINDOW_AFTER_MS }
+}
+
+/** Was "I'm awake" (at time t) inside today's wake-up window? */
+export function isOnTime(day: DayState, t: number): boolean {
+  const w = wakeWindow(day)
+  return w !== null && t >= w.opens && t <= w.closes
+}
+
+/** Bedtime check-in is open from 7 PM until the end of the day. */
+export function bedtimeOpensAt(day: DayState): number {
+  const [y, mo, d] = day.date.split('-').map(Number)
+  return new Date(y, mo - 1, d, BEDTIME_OPENS_HOUR, 0).getTime()
+}
+
 export interface DailyXp {
   wake: number
   promises: number
@@ -63,7 +95,7 @@ export interface DailyXp {
 }
 
 export function dailyXp(day: DayState): DailyXp {
-  const wake = day.awakeAt !== null ? XP.wake : 0
+  const wake = day.awakeAt !== null && isOnTime(day, day.awakeAt) ? XP.wake : 0
   const promises =
     day.promisesLockedAt !== null
       ? day.promises.filter((p) => p.done && p.text.trim()).length * XP.perPromise

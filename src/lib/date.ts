@@ -6,10 +6,10 @@ export function dateKey(d: Date = new Date()): string {
   return `${y}-${m}-${day}`
 }
 
-export function yesterdayKey(d: Date = new Date()): string {
-  const y = new Date(d)
-  y.setDate(y.getDate() - 1)
-  return dateKey(y)
+/** Date key `days` after the given key, e.g. addDays('2026-11-30', 1) → '2026-12-01'. */
+export function addDays(key: string, days: number): string {
+  const [y, m, d] = key.split('-').map(Number)
+  return dateKey(new Date(y, m - 1, d + days))
 }
 
 export function greeting(d: Date = new Date()): string {

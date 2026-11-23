@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { FocusLength, PetMood, Progress } from '../lib/types'
 import { clearProgress, defaultProgress, emptyDay, loadProgress, saveProgress } from '../lib/storage'
-import { dateKey } from '../lib/date'
+import { addDays, dateKey } from '../lib/date'
 import {
   alarmTimestamp,
+  bedtimeOpensAt,
   dailyXp,
   dayHadActivity,
   PROMISE_LOCK_GRACE_MS,
@@ -14,8 +15,9 @@ import {
 
 /**
  * Bring stored progress up to date with the clock:
- * 1. New day → bank yesterday's Pet XP (lifetime, never lost) and start a fresh day.
- *    Missed days simply produce no XP; nothing is taken away.
+ * 1. New day → bank yesterday's Pet XP (lifetime, never lost) and start a fresh day using the
+ *    wake-up time and promises planned at bedtime. A plan for a day the user skipped carries
+ *    forward to the next day they open the app. Missed days produce no XP; nothing is taken away.
  * 2. A running focus timer whose end time has passed → record the completed session.
  * 3. Apply the promise-locking rule.
  * Returns the same object when nothing changed, so React can skip re-renders.
@@ -25,11 +27,13 @@ function normalize(p: Progress, now: number): Progress {
   const today = dateKey(new Date(now))
   if (next.today.date !== today) {
     const old = next.today
+    const plan = next.nextDay && next.nextDay.date <= today ? next.nextDay : null
     next = {
       ...next,
       bankedXp: next.bankedXp + dailyXp(old).total,
       daysActive: next.daysActive + (dayHadActivity(old) ? 1 : 0),
-      today: emptyDay(today, next.wakeTime),
+      today: emptyDay(today, next.wakeTime, plan),
+      nextDay: plan ? null : next.nextDay,
     }
   }
   const f = next.activeFocus
@@ -56,11 +60,17 @@ interface ProgressApi {
   lifetimeXp: number
   mood: PetMood
   promisesLocked: boolean
-  /** When promises will lock automatically (alarm + 15 min), if that's still ahead. */
+  /** When promises will lock automatically (wake-up time + 15 min), if that's still ahead. */
   autoLockAt: number | null
+  bedtimeOpen: boolean
+  bedtimeOpensAt: number
+  /** Tomorrow's promises as currently planned (empty strings when not planned). */
+  tomorrowPromises: [string, string, string]
   savedOnDevice: boolean
   online: boolean
+  /** Sets the wake-up time from tomorrow onward. Today's time never changes. */
   setWakeTime: (time: string | null) => void
+  setTomorrowPromise: (index: number, text: string) => void
   confirmAwake: () => void
   setPromiseText: (index: number, text: string) => void
   togglePromise: (index: number) => void
@@ -118,19 +128,18 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const setWakeTime = useCallback(
-    (time: string | null) =>
-      update((p, t) => {
-        const day = p.today
-        const currentAlarm = alarmTimestamp(day)
-        const candidate = { ...day, alarmTime: time }
-        const newAlarm = alarmTimestamp(candidate)
-        // Change today's schedule only if today's alarm hasn't rung yet and the new one wouldn't lock
-        // promises instantly. Otherwise the new time starts tomorrow.
-        const applyToday =
-          day.promisesLockedAt === null &&
-          (currentAlarm === null || t < currentAlarm) &&
-          (newAlarm === null || t < newAlarm + PROMISE_LOCK_GRACE_MS)
-        return { ...p, wakeTime: time, today: applyToday ? candidate : day }
+    (time: string | null) => update((p) => ({ ...p, wakeTime: time })),
+    [update],
+  )
+
+  const setTomorrowPromise = useCallback(
+    (index: number, text: string) =>
+      update((p) => {
+        const date = addDays(p.today.date, 1)
+        const promises: [string, string, string] =
+          p.nextDay && p.nextDay.date === date ? [...p.nextDay.promises] : ['', '', '']
+        promises[index] = text.slice(0, 120)
+        return { ...p, nextDay: { date, promises } }
       }),
     [update],
   )
@@ -194,7 +203,10 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
   const cancelFocus = useCallback(() => update((p) => ({ ...p, activeFocus: null })), [update])
 
   const checkInBedtime = useCallback(
-    () => update((p, t) => (p.today.bedtimeAt !== null ? p : { ...p, today: { ...p.today, bedtimeAt: t } })),
+    () =>
+      update((p, t) =>
+        p.today.bedtimeAt !== null || t < bedtimeOpensAt(p.today) ? p : { ...p, today: { ...p.today, bedtimeAt: t } },
+      ),
     [update],
   )
 
@@ -218,6 +230,10 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     const alarm = alarmTimestamp(day)
     const autoLockAt =
       day.promisesLockedAt === null && alarm !== null && day.awakeAt === null ? alarm + PROMISE_LOCK_GRACE_MS : null
+    const opensAt = bedtimeOpensAt(day)
+    const tomorrow = addDays(day.date, 1)
+    const tomorrowPromises: [string, string, string] =
+      progress.nextDay && progress.nextDay.date === tomorrow ? progress.nextDay.promises : ['', '', '']
     return {
       progress,
       now,
@@ -226,9 +242,13 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
       mood,
       promisesLocked: day.promisesLockedAt !== null,
       autoLockAt,
+      bedtimeOpen: now >= opensAt,
+      bedtimeOpensAt: opensAt,
+      tomorrowPromises,
       savedOnDevice,
       online,
       setWakeTime,
+      setTomorrowPromise,
       confirmAwake,
       setPromiseText,
       togglePromise,
@@ -246,6 +266,7 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     savedOnDevice,
     online,
     setWakeTime,
+    setTomorrowPromise,
     confirmAwake,
     setPromiseText,
     togglePromise,
